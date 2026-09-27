@@ -28,6 +28,21 @@ def _load_dotenv(path: Path) -> None:
 
 _load_dotenv(ROOT / ".env")  # git-ignored; the simplest place for FRED_API_KEY
 
+
+def _refuse_committed_secret(example: Path) -> None:
+    """Stop early if a real-looking key sits in the committed example file."""
+    import re
+
+    if example.exists() and re.search(r"^\s*FRED_API_KEY\s*=\s*[0-9a-f]{32}\s*$", example.read_text(), re.M):
+        raise RuntimeError(
+            f"{example.name} contains what looks like a real FRED API key. That file is committed to git: "
+            "move the key to a file named .env (git-ignored), restore the placeholder in "
+            f"{example.name}, and regenerate the key at https://fred.stlouisfed.org/docs/api/api_key.html."
+        )
+
+
+_refuse_committed_secret(ROOT / ".env.example")
+
 # --- Local state -------------------------------------------------------------
 CACHE_DIR = Path(os.environ.get("MACRO_REGIME_CACHE_DIR", ROOT / "cache")).expanduser()
 FRED_CACHE_DIR = CACHE_DIR / "fred"          # raw series + headline panel (Parquet)
