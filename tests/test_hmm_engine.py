@@ -98,7 +98,7 @@ def _original_training_frame(e: HMMEngine) -> pd.DataFrame:
     from tests.conftest import FakeFredSession, synthetic_raw
     from data.fred_fetcher import FredFetcher
     import tempfile
-    raw = synthetic_raw(seed=0)
+    raw = synthetic_raw(seed=1)
     with tempfile.TemporaryDirectory() as d:
         f = FredFetcher(api_key="k", cache_dir=f"{d}/fred", manual_dir=f"{d}/m",
                         session=FakeFredSession({k: v for k, v in raw.items() if not k.startswith("_")}))

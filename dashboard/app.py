@@ -30,24 +30,13 @@ from data.overrides import OverrideStore
 from data.transforms import INDICATOR_KEYS, INDICATORS, get_spec
 from model.hmm_engine import NotFittedError
 from model.labeler import StateLabeler
+from reporting import figures as F
+from reporting.figures import (ACTUAL, ACTUAL_TRACK, BORDER, FONT, GRID, INK, INK2, MUTED, PLANE, SCENARIO,
+                               SCENARIO_TRACK, SURFACE, WARNING, gauge_figure)
+from reporting.report import build_history
 from scoring.live_score import EngineLoader, LiveScore, live_score
 
 log = logging.getLogger(__name__)
-
-# --- palette (validated with the dataviz checks; light surface) -------------
-SURFACE = "#fcfcfb"
-PLANE = "#f9f9f7"
-INK = "#0b0b0b"
-INK2 = "#52514e"
-MUTED = "#898781"
-GRID = "#e1e0d9"
-BORDER = "rgba(11,11,11,0.10)"
-ACTUAL = "#2a78d6"       # categorical slot 1 (blue)
-ACTUAL_TRACK = "#cde2fb"  # blue ramp step 100
-SCENARIO = "#eb6834"     # categorical slot 2 (orange)
-SCENARIO_TRACK = "#fbdccd"
-WARNING = "#fab219"      # status: override in effect
-FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
 
 INDEX_STRING = Template("""<!DOCTYPE html>
 <html>
@@ -132,53 +121,10 @@ def _fmt(value: float, unit: str) -> str:
     return f"{value:+.2f} {unit}" if unit == "pp" else f"{value:.2f}{'%' if unit == '%' else ' ' + unit}"
 
 
-def gauge_figure(title: str, prob: float, color: str, track: str, reference: float | None = None) -> go.Figure:
-    indicator: dict[str, Any] = dict(
-        mode="gauge+number",
-        value=round(prob * 100, 1),
-        number={"suffix": "%", "font": {"size": 40, "color": INK, "family": FONT}},
-        title={"text": title, "font": {"size": 14, "color": INK2, "family": FONT}},
-        gauge={
-            "axis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "ticksuffix": "%",
-                     "tickcolor": MUTED, "tickfont": {"color": MUTED, "size": 11}},
-            "bar": {"color": color, "thickness": 0.55},
-            "bgcolor": track,
-            "borderwidth": 0,
-        },
-    )
-    if reference is not None:
-        indicator["mode"] = "gauge+number+delta"
-        indicator["delta"] = {
-            "reference": round(reference * 100, 1), "suffix": " pts", "valueformat": "+.1f",
-            "font": {"size": 16, "color": INK2},
-            "increasing": {"color": INK2}, "decreasing": {"color": INK2},
-        }
-    fig = go.Figure(go.Indicator(**indicator))
-    fig.update_layout(height=250, margin=dict(l=30, r=30, t=50, b=10), paper_bgcolor="rgba(0,0,0,0)",
-                      font=dict(family=FONT, color=INK))
-    return fig
-
-
 def distribution_figure(score: LiveScore) -> go.Figure:
     names = [score.label(k) for k in range(score.n_states)]
-    a = [score.prob(k) * 100 for k in range(score.n_states)]
-    s = [score.prob(k, True) * 100 for k in range(score.n_states)]
-    fig = go.Figure()
-    fig.add_bar(name="Actual", x=names, y=a, marker_color=ACTUAL, marker_line_width=0,
-                text=[f"{v:.0f}%" for v in a], textposition="outside", textfont={"color": INK2},
-                hovertemplate="Actual · %{x}: %{y:.1f}%<extra></extra>")
-    fig.add_bar(name="Scenario", x=names, y=s, marker_color=SCENARIO, marker_line_width=0,
-                text=[f"{v:.0f}%" for v in s], textposition="outside", textfont={"color": INK2},
-                hovertemplate="Scenario · %{x}: %{y:.1f}%<extra></extra>")
-    fig.update_layout(
-        barmode="group", bargap=0.35, bargroupgap=0.08, height=260,
-        margin=dict(l=40, r=20, t=10, b=40), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family=FONT, color=INK2, size=12),
-        legend=dict(orientation="h", y=1.12, x=0, font={"color": INK2}),
-        yaxis=dict(range=[0, 110], ticksuffix="%", gridcolor=GRID, zerolinecolor=GRID, tickfont={"color": MUTED}),
-        xaxis=dict(showgrid=False, tickfont={"color": INK}),
-    )
-    return fig
+    return F.distribution_figure(names, [score.prob(k) for k in range(score.n_states)],
+                                 [score.prob(k, True) for k in range(score.n_states)])
 
 
 def legend_table(score: LiveScore) -> html.Table:
@@ -189,7 +135,7 @@ def legend_table(score: LiveScore) -> html.Table:
     for k in range(score.n_states):
         means = score.state_table.loc[k]
         rows.append(html.Tr(
-            [html.Td(str(k)), html.Td(score.label(k))]
+            [html.Td(str(k)), html.Td([html.Span(className="swatch", style={"background": F.state_color(k, score.labels.labels.get(k))}), score.label(k)])]
             + [html.Td(f"{means[f]:+.2f}") for f in feats]
             + [html.Td(f"{score.persistence[k]:.1f}"), html.Td(f"{score.prob(k) * 100:.0f}%"),
                html.Td(f"{score.prob(k, True) * 100:.0f}%")]
@@ -203,7 +149,7 @@ def render(services: Services, tracked_state: int | None = None) -> dict[str, An
     out: dict[str, Any] = {
         "banner": "", "banner_class": "banner", "status": "", "regime_options": [], "regime_value": tracked_state,
         "gauge_actual": go.Figure(), "gauge_scenario": go.Figure(), "delta": [], "persistence": [],
-        "distribution": go.Figure(), "legend": [], "score": None,
+        "distribution": go.Figure(), "history": go.Figure(), "legend": [], "score": None,
         "actual": {k: "—" for k in INDICATOR_KEYS}, "feature": {k: "" for k in INDICATOR_KEYS},
         "badge": {k: ("FRED value", "badge") for k in INDICATOR_KEYS},
     }
@@ -243,6 +189,10 @@ def render(services: Services, tracked_state: int | None = None) -> dict[str, An
                   html.B(score.label(score.top_scenario)), f" · expected ≈ {score.persistence_scenario:.1f} months"]),
     ]
     out["distribution"] = distribution_figure(score)
+    try:
+        out["history"] = F.history_figure(build_history(services.fetcher, engine, 15), score.labels.labels, engine.training_end)
+    except Exception as exc:  # noqa: BLE001 - history is decorative; never block the score
+        log.warning("history figure failed: %s", exc)
     legend_children: list[Any] = [legend_table(score)]
     if score.labels.provisional:
         legend_children.append(html.Div(
@@ -344,6 +294,8 @@ def build_layout() -> html.Div:
             ),
             html.Div([html.H2("Full state distribution"),
                       dcc.Graph(id="distribution", config={"displayModeBar": False})], className="section"),
+            html.Div([html.H2("Regime history · filtered probabilities, last 15 years"),
+                      dcc.Graph(id="history", config={"displayModeBar": False})], className="section"),
             html.Div([html.H2("State legend"), html.Div(id="legend")], className="section"),
         ],
         className="page",
@@ -376,7 +328,8 @@ def create_app(services: Services | None = None) -> Dash:
         Output("banner", "children"), Output("banner", "className"), Output("status", "children"),
         Output("regime-select", "options"), Output("regime-select", "value"),
         Output("gauge-actual", "figure"), Output("gauge-scenario", "figure"), Output("delta-tile", "children"),
-        Output("persistence", "children"), Output("distribution", "figure"), Output("legend", "children"),
+        Output("persistence", "children"), Output("distribution", "figure"), Output("history", "figure"),
+        Output("legend", "children"),
         *[Output(f"actual-{k}", "children") for k in INDICATOR_KEYS],
         *[Output(f"feature-{k}", "children") for k in INDICATOR_KEYS],
         *[Output(f"badge-{k}", "children") for k in INDICATOR_KEYS],
@@ -404,7 +357,7 @@ def create_app(services: Services | None = None) -> Dash:
 def _flatten(r: dict[str, Any]) -> tuple:
     return (
         r["banner"], r["banner_class"], r["status"], r["regime_options"], r["regime_value"],
-        r["gauge_actual"], r["gauge_scenario"], r["delta"], r["persistence"], r["distribution"], r["legend"],
+        r["gauge_actual"], r["gauge_scenario"], r["delta"], r["persistence"], r["distribution"], r["history"], r["legend"],
         *[r["actual"][k] for k in INDICATOR_KEYS],
         *[r["feature"][k] for k in INDICATOR_KEYS],
         *[r["badge"][k][0] for k in INDICATOR_KEYS],

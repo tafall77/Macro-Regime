@@ -39,6 +39,8 @@ from model.training_data import (  # noqa: F401  (re-exported for callers)
 )
 
 log = logging.getLogger(__name__)
+# hmmlearn logs every non-monotone EM step as a warning; restarts + best-likelihood selection make that noise.
+logging.getLogger("hmmlearn").setLevel(logging.ERROR)
 
 MIN_TRAINING_ROWS = 36
 _LOG_EPS = 1e-300
@@ -57,7 +59,7 @@ class HMMEngine:
         tol: float = 1e-4,
         n_restarts: int = 5,
         random_state: int = config.RANDOM_SEED,
-        min_covar: float = 1e-3,
+        min_covar: float = 1e-2,
     ) -> None:
         if n_states < 2:
             raise ValueError("n_states must be >= 2")
