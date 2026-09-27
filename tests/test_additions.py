@@ -13,7 +13,8 @@ from reporting.report import Report, build_history, build_report, plotly_cdn_url
 
 def test_synthetic_raw_shapes_and_regimes():
     raw = synthetic_raw(seed=1, end="2025-08-31")
-    assert set(raw) == {"DGS10", "DGS2", "PCEPILFE", "FEDFUNDS", config.PMI_SERIES_ID, "_states"}
+    from data.transforms import CATALOGUE, series_ids_for
+    assert set(raw) >= set(series_ids_for(CATALOGUE)) | {"_states"}
     assert raw["_states"].index[-1] == pd.Timestamp("2025-08-31") and set(raw["_states"].unique()) == {0, 1, 2}
     assert raw["FEDFUNDS"].min() >= 0.05
     noisy = synthetic_raw(seed=1, end="2025-08-31", noise={"pmi": 5.0})

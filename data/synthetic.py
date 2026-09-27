@@ -62,7 +62,41 @@ def synthetic_raw(seed: int = 0, end: str | None = None, pmi_series_id: str | No
     days = pd.bdate_range(months[0] - pd.offsets.MonthBegin(1), months[-1])
     pos = pd.Series(np.arange(n), index=months.to_period("M")).reindex(days.to_period("M")).to_numpy()
     first_of_month = months - pd.offsets.MonthBegin(1)
+    # --- the wider catalogue, each with a regime-dependent level plus noise ---
+    def regime_series(levels, sd, smooth=0.0):
+        target = np.asarray(levels)[states]
+        out = np.empty(n)
+        out[0] = target[0]
+        for t in range(1, n):
+            out[t] = smooth * out[t - 1] + (1 - smooth) * target[t] + rng.normal(0, sd)
+        return out
+
+    credit = regime_series([3.4, 2.3, 1.7], nz.get("credit", 0.15), smooth=0.5)
+    unrate = regime_series([6.5, 5.0, 4.0], nz.get("unrate", 0.08), smooth=0.85)
+    claims = regime_series([420_000, 330_000, 250_000], nz.get("claims", 12_000), smooth=0.6)
+    payrolls_chg = regime_series([-120.0, 120.0, 220.0], nz.get("payrolls", 60.0))
+    payems = 110_000 + np.cumsum(payrolls_chg)
+    cpi = 100.0 * np.cumprod(1.0 + (STATE_PCE[states] + 0.5) / 1200.0 + rng.normal(0, nz["pce"] * 1.5, n))
+    core_cpi = 100.0 * np.cumprod(1.0 + (STATE_PCE[states] + 0.3) / 1200.0 + rng.normal(0, nz["pce"], n))
+    ppi = 100.0 * np.cumprod(1.0 + (STATE_PCE[states] - 1.0) / 1200.0 + rng.normal(0, 0.004, n))
+    sentiment = regime_series([65.0, 85.0, 95.0], nz.get("sentiment", 3.0), smooth=0.5)
+    services_pmi = regime_series([47.0, 52.0, 57.0], nz["pmi"])
+    chicago_pmi = regime_series([43.0, 51.0, 58.0], nz["pmi"] * 1.6)
+    conf_board = regime_series([70.0, 100.0, 120.0], nz.get("confidence", 4.0), smooth=0.5)
+    weeks = pd.date_range(months[0] - pd.offsets.MonthBegin(1), months[-1], freq="W-SAT")
+    wpos = pd.Series(np.arange(n), index=months.to_period("M")).reindex(weeks.to_period("M")).to_numpy()
     raw = {
+        "BAA10Y": pd.Series(credit[pos] + rng.normal(0, 0.02, len(days)), index=days),
+        "UNRATE": pd.Series(np.round(unrate, 1), index=first_of_month),
+        "ICSA": pd.Series(claims[wpos] + rng.normal(0, 8_000, len(weeks)), index=weeks),
+        "PAYEMS": pd.Series(payems, index=first_of_month),
+        "CPIAUCSL": pd.Series(cpi, index=first_of_month),
+        "CPILFESL": pd.Series(core_cpi, index=first_of_month),
+        "PPIACO": pd.Series(ppi, index=first_of_month),
+        "UMCSENT": pd.Series(sentiment, index=first_of_month),
+        "ISM_SERVICES_PMI": pd.Series(services_pmi, index=first_of_month),
+        "CHICAGO_PMI": pd.Series(chicago_pmi, index=first_of_month),
+        "CONF_BOARD_CCI": pd.Series(conf_board, index=first_of_month),
         "DGS10": pd.Series(dgs10_m[pos] + rng.normal(0, 0.02, len(days)), index=days),
         "DGS2": pd.Series(dgs2_m[pos] + rng.normal(0, 0.02, len(days)), index=days),
         "PCEPILFE": pd.Series(pce, index=first_of_month),
@@ -71,6 +105,23 @@ def synthetic_raw(seed: int = 0, end: str | None = None, pmi_series_id: str | No
         "_states": pd.Series(states, index=months),
     }
     return raw
+
+
+def write_demo_manual_csvs(raw: dict[str, pd.Series], manual_dir) -> list:
+    """Write the not-on-FRED series of a synthetic history as manual CSV supplements."""
+    from pathlib import Path
+
+    from data.transforms import MANUAL_ONLY_SERIES
+
+    manual_dir = Path(manual_dir)
+    manual_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for sid in MANUAL_ONLY_SERIES:
+        if sid in raw:
+            path = manual_dir / f"{sid}.csv"
+            raw[sid].rename("value").rename_axis("date").to_csv(path)
+            written.append(path)
+    return written
 
 
 @dataclass

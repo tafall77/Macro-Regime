@@ -1,6 +1,10 @@
 """Shared fixtures: a fake FRED API serving a synthetic 3-regime macro history."""
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("MACRO_REGIME_INDICATORS", "yield_curve,core_pce,fed_funds,ism_pmi")  # before config import
+
 import pandas as pd
 import pytest
 

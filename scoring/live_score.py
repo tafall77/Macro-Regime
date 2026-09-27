@@ -21,7 +21,7 @@ import pandas as pd
 import config
 from data.fred_fetcher import FredFetcher, StaleDataError
 from data.overrides import OverrideStore
-from data.transforms import INDICATORS, features_from_panel
+from data.transforms import features_from_panel
 from model.hmm_engine import HMMEngine
 from model.labeler import LabelSet, StateLabeler
 
@@ -152,7 +152,7 @@ def scenario_panel(fetcher: FredFetcher, overrides: OverrideStore) -> tuple[pd.D
     """(actual panel, scenario panel, as_of) with overrides applied to the latest month only."""
     actual, as_of = actual_panel_asof(fetcher)
     scenario = actual.copy()
-    for spec in INDICATORS:
+    for spec in fetcher.indicators:
         if overrides.is_overridden(spec.key):
             scenario.loc[as_of, spec.key] = overrides.get_effective(spec.key, as_of)
     return actual, scenario, as_of

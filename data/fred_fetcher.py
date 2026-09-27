@@ -37,6 +37,7 @@ from data.transforms import (
     headline_panel,
     month_end,
     months_between,
+    select,
 )
 from model.training_data import ACTUAL_PROVENANCE, TrainingData
 
@@ -76,7 +77,7 @@ class FredFetcher:
         api_key: str | None = None,
         cache_dir: str | Path | None = None,
         manual_dir: str | Path | None = None,
-        indicators: Iterable[IndicatorSpec] = INDICATORS,
+        indicators: Iterable[IndicatorSpec | str] = INDICATORS,
         session: requests.Session | None = None,
         observation_start: str | None = None,
         base_url: str | None = None,
@@ -86,7 +87,7 @@ class FredFetcher:
         self.api_key = api_key if api_key is not None else config.FRED_API_KEY
         self.cache_dir = Path(cache_dir) if cache_dir is not None else config.FRED_CACHE_DIR
         self.manual_dir = Path(manual_dir) if manual_dir is not None else config.MANUAL_DIR
-        self.indicators = tuple(indicators)
+        self.indicators = tuple(get_spec(i) if isinstance(i, str) else i for i in indicators)
         self.session = session or requests.Session()
         self.observation_start = observation_start or config.OBSERVATION_START
         self.base_url = base_url or config.FRED_BASE_URL
@@ -115,6 +116,14 @@ class FredFetcher:
     @property
     def series_ids(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(sid for spec in self.indicators for sid in spec.series_ids))
+
+    @property
+    def manual_only_ids(self) -> frozenset[str]:
+        return frozenset(sid for spec in self.indicators if spec.manual_only for sid in spec.series_ids)
+
+    @property
+    def keys(self) -> tuple[str, ...]:
+        return tuple(spec.key for spec in self.indicators)
 
     # --------------------------------------------------------------- network
     def fetch_series(self, series_id: str) -> pd.Series:
@@ -174,6 +183,13 @@ class FredFetcher:
 
     def _pull_with_supplement(self, series_id: str) -> pd.Series:
         manual = self.manual_series(series_id)
+        if series_id in self.manual_only_ids:
+            if manual is None or manual.empty:
+                raise FredError(
+                    f"{series_id} is not published on FRED; supply {self.manual_dir / (series_id + '.csv')} "
+                    "(columns: date,value) or remove the indicator from MACRO_REGIME_INDICATORS"
+                )
+            return manual
         try:
             fred = self.fetch_series(series_id)
         except FredError:

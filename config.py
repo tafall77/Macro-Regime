@@ -31,6 +31,14 @@ OBSERVATION_START = os.environ.get("MACRO_REGIME_OBSERVATION_START", "1985-01-01
 PMI_SERIES_ID = os.environ.get("MACRO_REGIME_PMI_SERIES", "NAPM")
 REQUEST_TIMEOUT_SECONDS = 30
 
+# --- Indicator set -----------------------------------------------------------
+# Comma-separated keys from data.transforms.CATALOGUE. The default is the core set the
+# model ships with; run `MacroRegime.evaluate_indicators()` on real data before widening it.
+DEFAULT_INDICATORS = "yield_curve,core_pce,fed_funds,ism_pmi,credit_spread,unemployment,jobless_claims"
+ACTIVE_INDICATORS = tuple(
+    k.strip() for k in os.environ.get("MACRO_REGIME_INDICATORS", DEFAULT_INDICATORS).split(",") if k.strip()
+)
+
 # --- Feature construction ----------------------------------------------------
 FED_FUNDS_ROC_MONTHS = int(os.environ.get("MACRO_REGIME_FF_ROC_MONTHS", "3"))
 # How many months a lagging indicator may be carried forward before it is "stale".

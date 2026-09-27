@@ -19,8 +19,8 @@ import pandas as pd
 import config
 from data.fred_fetcher import FredFetcher
 from data.overrides import OverrideStore
-from data.synthetic import FakeFredSession, synthetic_raw
-from data.transforms import INDICATOR_KEYS
+from data.synthetic import FakeFredSession, synthetic_raw, write_demo_manual_csvs
+from data.transforms import CATALOGUE_KEYS, INDICATORS, select
 from model.backtest import BacktestResult, walk_forward
 from model.hmm_engine import HMMEngine, NotFittedError
 from model.labeler import StateLabeler
@@ -37,18 +37,21 @@ class MacroRegime:
         n_states: int | None = None,
         seed: int = 1,
         stale_limit_months: int | None = None,
+        indicators: list[str] | tuple[str, ...] | None = None,
     ) -> None:
         self.demo = demo
         self.n_states = n_states or config.N_STATES
         root = Path(cache_dir) if cache_dir is not None else (config.CACHE_DIR / "demo" if demo else config.CACHE_DIR)
         self.root = root
+        specs = select(indicators) if indicators is not None else INDICATORS
         session = None
         if demo:
             self._raw = synthetic_raw(seed=seed)
             session = FakeFredSession.from_raw(self._raw)
             api_key = api_key or "demo"
+            write_demo_manual_csvs(self._raw, root / "manual")  # the not-on-FRED indicators, as CSV supplements
         self.fetcher = FredFetcher(api_key=api_key, cache_dir=root / "fred", manual_dir=root / "manual",
-                                   session=session, stale_limit_months=stale_limit_months)
+                                   session=session, stale_limit_months=stale_limit_months, indicators=specs)
         self.overrides = OverrideStore(self.fetcher, root / "overrides.json")
         self.labeler = StateLabeler(root / "model" / "labels.json")
         self.engine_path = root / "model" / "hmm_engine.pkl"
@@ -108,8 +111,8 @@ class MacroRegime:
     def override(self, **values: float) -> dict[str, float]:
         """Set overrides in headline units, e.g. ``override(ism_pmi=47, fed_funds=4.5)``."""
         for key, value in values.items():
-            if key not in INDICATOR_KEYS:
-                raise KeyError(f"unknown indicator {key!r}; expected one of {INDICATOR_KEYS}")
+            if key not in self.fetcher.keys:
+                raise KeyError(f"unknown or inactive indicator {key!r}; active: {self.fetcher.keys}")
             if value is None:
                 self.overrides.clear_override(key)
             else:
@@ -144,6 +147,27 @@ class MacroRegime:
         """Out-of-sample walk-forward evaluation on the actual history."""
         return walk_forward(self.fetcher.training_data(), n_states=self.n_states, refit_every=refit_every,
                             min_train=min_train, window_years=window_years, n_restarts=n_restarts, n_iter=n_iter)
+
+    @property
+    def indicators(self) -> tuple[str, ...]:
+        return self.fetcher.keys
+
+    def evaluate_indicators(self, candidates: list[str] | None = None, base: list[str] | None = None, **kwargs) -> pd.DataFrame:
+        """Rank candidate indicators by what they add to the base set (see model.selection).
+
+        Uses a separate ``fred_eval`` cache so the production cache is untouched. In real
+        mode this pulls the candidates' series from FRED (needs the API key).
+        """
+        from model.selection import evaluate_indicators
+
+        base_keys = list(base) if base is not None else list(self.fetcher.keys)
+        cand_keys = [k for k in (candidates or CATALOGUE_KEYS) if k not in base_keys]
+        session = FakeFredSession.from_raw(self._raw) if self.demo else self.fetcher.session
+        eval_fetcher = FredFetcher(api_key=self.fetcher.api_key, cache_dir=self.root / "fred_eval",
+                                   manual_dir=self.fetcher.manual_dir, session=session,
+                                   stale_limit_months=self.fetcher.stale_limit_months, indicators=base_keys + cand_keys)
+        eval_fetcher.refresh()
+        return evaluate_indicators(eval_fetcher, base_keys, cand_keys, n_states=self.n_states, **kwargs)
 
     def __repr__(self) -> str:
         mode = "demo" if self.demo else "fred"

@@ -27,7 +27,7 @@ from dash import Dash, Input, Output, State, ctx, dcc, html
 import config
 from data.fred_fetcher import CacheMissingError, FredError, FredFetcher, StaleDataError
 from data.overrides import OverrideStore
-from data.transforms import INDICATOR_KEYS, INDICATORS, get_spec
+from data.transforms import get_spec
 from model.hmm_engine import NotFittedError
 from model.labeler import StateLabeler
 from reporting import figures as F
@@ -146,6 +146,7 @@ def legend_table(score: LiveScore) -> html.Table:
 # ---------------------------------------------------------------- rendering
 def render(services: Services, tracked_state: int | None = None) -> dict[str, Any]:
     """Compute every dynamic piece of the page. Pure apart from reading the services."""
+    INDICATOR_KEYS = services.fetcher.keys
     out: dict[str, Any] = {
         "banner": "", "banner_class": "banner", "status": "", "regime_options": [], "regime_value": tracked_state,
         "gauge_actual": go.Figure(), "gauge_scenario": go.Figure(), "delta": [], "persistence": [],
@@ -224,6 +225,7 @@ def render(services: Services, tracked_state: int | None = None) -> dict[str, An
 
 def sync_overrides(services: Services, triggered: str | None, values: dict[str, Any]) -> dict[str, Any]:
     """Apply the input values to the store; return the values the inputs should show."""
+    INDICATOR_KEYS = services.fetcher.keys
     store = services.overrides
     if triggered == "clear-btn":
         store.clear_all()
@@ -261,7 +263,7 @@ def indicator_card(spec) -> html.Div:
     )
 
 
-def build_layout() -> html.Div:
+def build_layout(indicators) -> html.Div:
     return html.Div(
         [
             dcc.Store(id="override-version", data=0),
@@ -276,7 +278,7 @@ def build_layout() -> html.Div:
                 className="topbar",
             ),
             html.Div(id="banner", className="banner"),
-            html.Div([indicator_card(spec) for spec in INDICATORS], className="cards"),
+            html.Div([indicator_card(spec) for spec in indicators], className="cards"),
             html.Div(
                 [
                     html.H2("Regime confidence"),
@@ -306,8 +308,9 @@ def create_app(services: Services | None = None) -> Dash:
     services = services or Services()
     app = Dash(__name__, title="Macro Regime Engine")
     app.index_string = INDEX_STRING
-    app.layout = build_layout()
+    app.layout = build_layout(services.fetcher.indicators)
     app._services = services  # type: ignore[attr-defined]
+    INDICATOR_KEYS = services.fetcher.keys
 
     override_inputs = [Input(f"override-{k}", "value") for k in INDICATOR_KEYS]
     override_outputs = [Output(f"override-{k}", "value") for k in INDICATOR_KEYS]
@@ -355,6 +358,7 @@ def create_app(services: Services | None = None) -> Dash:
 
 
 def _flatten(r: dict[str, Any]) -> tuple:
+    INDICATOR_KEYS = tuple(r["actual"])
     return (
         r["banner"], r["banner_class"], r["status"], r["regime_options"], r["regime_value"],
         r["gauge_actual"], r["gauge_scenario"], r["delta"], r["persistence"], r["distribution"], r["history"], r["legend"],
