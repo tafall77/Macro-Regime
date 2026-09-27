@@ -49,7 +49,8 @@ mr.report().save("regime.html")    # standalone file (inline_js=True embeds plot
 
 ```bash
 pip install -r requirements.txt
-export FRED_API_KEY=...            # free: https://fred.stlouisfed.org/docs/api/api_key.html
+cp .env.example .env               # put your key in .env (git-ignored), or export FRED_API_KEY=...
+                                   # free key: https://fred.stlouisfed.org/docs/api/api_key.html
 
 python scheduler.py --once         # 1. pull FRED, fit, save to cache/model/
 python -m model.labeler show       # 2. inspect the state means …
@@ -58,7 +59,8 @@ python -m dashboard.app            # 3. http://127.0.0.1:8050
 python scheduler.py --cron         # 4. crontab line for the monthly refit
 ```
 
-In a notebook the same thing is `MacroRegime()` (reads `FRED_API_KEY`) or `MacroRegime(api_key="...")`.
+In a notebook the same thing is `MacroRegime()` (reads `FRED_API_KEY` from `.env` or the environment)
+or `MacroRegime(api_key="...")`.
 
 ---
 
@@ -203,7 +205,8 @@ Local state lives under `cache/` (git-ignored): `fred/` (raw + panel Parquet), `
 
 ## Configuration
 
-All via environment variables; see `config.py` for the full list.
+All via environment variables, or a `.env` file in the repository root (see `.env.example`;
+real environment variables win). See `config.py` for the full list.
 
 | Variable | Default | Meaning |
 |---|---|---|

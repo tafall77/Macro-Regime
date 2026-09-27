@@ -11,6 +11,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
+
+def _load_dotenv(path: Path) -> None:
+    """Read KEY=VALUE lines from a .env file into os.environ (existing variables win)."""
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip().strip("'\"")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv(ROOT / ".env")  # git-ignored; the simplest place for FRED_API_KEY
+
 # --- Local state -------------------------------------------------------------
 CACHE_DIR = Path(os.environ.get("MACRO_REGIME_CACHE_DIR", ROOT / "cache")).expanduser()
 FRED_CACHE_DIR = CACHE_DIR / "fred"          # raw series + headline panel (Parquet)
