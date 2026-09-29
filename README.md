@@ -15,6 +15,32 @@ It answers three questions:
 
 Prices come from Yahoo Finance through `yfinance`, so no account or API key is needed.
 
+The repository has two notebooks:
+
+| Notebook | What it is |
+|---|---|
+| `Seasonality.ipynb` | the research dashboard described below: recent returns, next-quarter seasonality and a ranking backtest |
+| `Sector_Seasonal_Backtest.ipynb` | a standalone backtest of the **seasonal dip-buy** rule; download this one file on its own |
+
+## The seasonal dip-buy backtest
+
+`Sector_Seasonal_Backtest.ipynb` tests one rule on the 11 S&P 500 sector ETFs. At the end of each quarter, buy
+a sector for the coming quarter when:
+
+1. its average return in the coming calendar quarter over the past *N* years is positive, and
+2. its return in the quarter that just ended is below that average.
+
+For example, if Consumer Staples fell 5% in Q3 and its average Q4 over the past 5 years is +3%, the rule buys XLP
+for Q4. Qualifying sectors are held in equal weight; when none qualifies the money earns T-bill rates.
+
+The notebook reports performance against SPY net of trading costs, drawdowns and calendar-year returns, and what the
+rule bought. It isolates the dip filter's own effect and compares 3, 5, 7 and 10-year lookbacks. It also checks
+the best setting on years it wasn't chosen on, tests whether random sector picks could match it, shows the
+signal for the upcoming quarter, and ends with a pass/fail scorecard.
+
+It contains all of its own code, so it runs from a single downloaded file. It needs `yfinance`, `pandas`,
+`numpy` and `matplotlib`, and an internet connection. Run all cells; it takes about a minute and saves nothing.
+
 ## Run it
 
 1. Download the repository (green **Code** button, then **Download ZIP**) and extract it.
@@ -98,9 +124,10 @@ All in the notebook's first cell.
 
 | File | Purpose |
 |---|---|
-| `Seasonality.ipynb` | the notebook |
+| `Seasonality.ipynb` | the research dashboard notebook |
+| `Sector_Seasonal_Backtest.ipynb` | standalone backtest of the seasonal dip-buy rule |
 | `seasonality.py` | data loading, return calculations, backtest and chart functions used by the notebook |
-| `tests/test_seasonality.py` | tests on synthetic prices with known answers; run with `python -m pytest` |
+| `tests/` | tests on synthetic prices with known answers, including the backtest notebook's engine; run with `python -m pytest` |
 | `requirements.txt` | Python packages |
 
 The earlier macro regime engine is preserved in the git history at commit `5a74628`

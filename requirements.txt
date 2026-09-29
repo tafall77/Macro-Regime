@@ -2,6 +2,7 @@
 numpy>=1.24
 pandas>=2.0
 plotly>=5.20
+matplotlib>=3.5    # charts in the backtest notebook
 yfinance>=0.2.54
 nbformat>=5.9      # lets plotly draw charts inside Jupyter
 
