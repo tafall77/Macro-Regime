@@ -103,4 +103,5 @@ All in the notebook's first cell.
 | `tests/test_seasonality.py` | tests on synthetic prices with known answers; run with `python -m pytest` |
 | `requirements.txt` | Python packages |
 
-The earlier macro regime engine is preserved in the git tag `archive/macro-regime-engine`.
+The earlier macro regime engine is preserved in the git history at commit `5a74628`
+(`git checkout 5a74628`, or browse it on GitHub under that commit).
