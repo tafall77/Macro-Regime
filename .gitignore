@@ -3,11 +3,12 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.ipynb_checkpoints/
 .venv/
 venv/
 
-# Local state: FRED cache, fitted models, labels, override session file
-cache/
+# Optional HTML export written by the notebook
+seasonality_report.html
 
 # Secrets
 .env
